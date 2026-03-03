@@ -1,107 +1,25 @@
-import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/admin/require-admin";
+import { db } from "@/lib/supabase/rest";
+import { clientSchema } from "@/lib/validations";
 
-export default async function AdminClientesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; page?: string; pageSize?: string }>;
-}) {
-  const { q, page, pageSize } = await searchParams;
-  const query = q?.trim();
-  const currentPage = Math.max(1, Number(page || 1));
-  const currentPageSize = Math.min(50, Math.max(1, Number(pageSize || 10)));
-  const skip = (currentPage - 1) * currentPageSize;
+async function createClient(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const parsed = clientSchema.parse(Object.fromEntries(formData));
+  await db.insert("clients", { ...parsed, email: parsed.email || null, phone: parsed.phone || null, company: parsed.company || null, notes: parsed.notes || null });
+  revalidatePath("/admin/clientes");
+}
 
-  const where = query
-    ? {
-        OR: [
-          { name: { contains: query, mode: "insensitive" as const } },
-          { email: { contains: query, mode: "insensitive" as const } },
-          { company: { contains: query, mode: "insensitive" as const } },
-        ],
-      }
-    : undefined;
+async function deleteClient(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  await db.remove(`clients?id=eq.${String(formData.get("id"))}`);
+  revalidatePath("/admin/clientes");
+}
 
-  const [clients, total] = await Promise.all([
-    prisma.client.findMany({ where, orderBy: { createdAt: "desc" }, skip, take: currentPageSize }),
-    prisma.client.count({ where }),
-  ]);
-
-  const totalPages = Math.max(1, Math.ceil(total / currentPageSize));
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-brand">Clientes</h1>
-        <Link href="/admin/clientes/novo" className="rounded-full bg-brand-accent px-4 py-2 text-sm font-semibold text-white">
-          Novo Cliente
-        </Link>
-      </div>
-
-      <form className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
-          <input name="q" defaultValue={query || ""} placeholder="Pesquisar por nome, email ou empresa" className="rounded-md border border-slate-300 px-3 py-2" />
-          <select name="pageSize" defaultValue={String(currentPageSize)} className="rounded-md border border-slate-300 px-3 py-2">
-            <option value="10">10 / página</option>
-            <option value="20">20 / página</option>
-            <option value="50">50 / página</option>
-          </select>
-          <button className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white">Aplicar</button>
-        </div>
-      </form>
-
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        {clients.length === 0 ? (
-          <p className="p-6 text-sm text-slate-600">Nenhum cliente encontrado com os filtros atuais.</p>
-        ) : (
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-slate-600">
-              <tr>
-                <th className="px-4 py-3">Nome</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Empresa</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.id} className="border-t border-slate-100">
-                  <td className="px-4 py-3 font-medium text-slate-800">{client.name}</td>
-                  <td className="px-4 py-3 text-slate-600">{client.email || "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{client.company || "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{client.status}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/clientes/${client.id}`} className="font-semibold text-brand-accent hover:underline">
-                      Ver detalhe
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between text-sm text-slate-600">
-        <p>
-          Página {currentPage} de {totalPages} • {total} registos
-        </p>
-        <div className="flex gap-2">
-          <Link
-            href={`/admin/clientes?q=${encodeURIComponent(query || "")}&page=${Math.max(1, currentPage - 1)}&pageSize=${currentPageSize}`}
-            className="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50"
-          >
-            Anterior
-          </Link>
-          <Link
-            href={`/admin/clientes?q=${encodeURIComponent(query || "")}&page=${Math.min(totalPages, currentPage + 1)}&pageSize=${currentPageSize}`}
-            className="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50"
-          >
-            Seguinte
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+export default async function AdminClientesPage() {
+  await requireAdmin();
+  const clients = await db.select("clients?select=*&order=created_at.desc");
+  return <div className="space-y-4"><h1 className="text-2xl font-bold text-brand">Clientes</h1><form action={createClient} className="grid gap-2 rounded-xl border bg-white p-4 md:grid-cols-2"><input name="name" required placeholder="Nome" className="rounded border px-3 py-2" /><input name="email" placeholder="Email" className="rounded border px-3 py-2" /><input name="phone" placeholder="Telefone" className="rounded border px-3 py-2" /><input name="company" placeholder="Empresa" className="rounded border px-3 py-2" /><textarea name="notes" placeholder="Notas" className="rounded border px-3 py-2 md:col-span-2" /><button className="rounded bg-brand px-4 py-2 text-white md:col-span-2">Criar cliente</button></form><div className="space-y-2">{clients?.map((client: any) => <div key={client.id} className="flex items-center justify-between rounded border bg-white p-3"><div><p className="font-semibold">{client.name}</p><p className="text-sm text-slate-600">{client.email ?? "Sem email"}</p></div><form action={deleteClient}><input type="hidden" name="id" value={client.id} /><button className="text-sm text-rose-600">Eliminar</button></form></div>)}</div></div>;
 }
