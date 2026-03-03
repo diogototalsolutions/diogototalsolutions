@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClientServiceStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum QuoteRequestStatus {
+  NOVO
+  EM_CONTACTO
+  ORCAMENTO_ENVIADO
+  FECHADO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(STAFF)
+  createdAt    DateTime @default(now())
+}
+
+model Client {
+  id        String       @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  company   String?
+  nif       String?
+  address   String?
+  notes     String?
+  status    ClientStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+
+  clientServices ClientService[]
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String
+  basePrice   Decimal?
+  active      Boolean  @default(true)
+  category    String?
+  createdAt   DateTime @default(now())
+
+  clientServices ClientService[]
+}
+
+model ClientService {
+  id        String              @id @default(cuid())
+  clientId  String
+  serviceId String
+  notes     String?
+  startDate DateTime?
+  status    ClientServiceStatus @default(ACTIVE)
+  createdAt DateTime            @default(now())
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([serviceId])
+}
+
+model QuoteRequest {
+  id            String             @id @default(cuid())
+  name          String
+  company       String?
+  email         String
+  phone         String?
+  subject       String
+  message       String
+  consent       Boolean
+  status        QuoteRequestStatus @default(NOVO)
+  internalNotes String?
+  createdAt     DateTime           @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}
