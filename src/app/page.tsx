@@ -54,7 +54,7 @@ export default async function HomePage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {services.slice(0, 3).map((service) => (
               <article key={service.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="font-semibold text-slate-900">{service.name}</h3>
+                <h3 className="font-semibold text-slate-900">{service.title}</h3>
                 <p className="mt-2 text-sm text-slate-600">{service.description}</p>
               </article>
             ))}

@@ -1,100 +1,60 @@
-# DTS Web App
+# DTS Web App (Next.js + Supabase)
 
-Aplicação web da DTS (site público + portal privado da equipa).
+Aplicação completa para a DTS com:
+- Site público: `/`, `/servicos`, `/quem-somos`, `/o-que-fazemos`, `/contacto`
+- Pedido de orçamento (grava em `quote_requests` + envio de email para `minedigas@gmail.com`)
+- Área privada admin: `/admin`, `/admin/clientes`, `/admin/servicos`, `/admin/pedidos`
+- Autenticação Supabase Auth **apenas para o admin**
+- RLS aplicado conforme requisitos
 
-## Estado atual
+## Stack
+- Next.js App Router (v14+ compatível; projeto está em Next 15)
+- TypeScript
+- Tailwind CSS
+- Supabase (Postgres + Auth)
+- Zod validação
+- Resend (preferido) com fallback SMTP Nodemailer
 
-### ✅ Fase 1–5
-- Site público + contacto + auth + área admin CRUD.
+## Variáveis de ambiente
+Cria `.env.local`:
 
-### ✅ Fase 6 (refinos production-ready)
-- Hardening de headers HTTP (CSP mínimo, nosniff, frame deny, referrer policy).
-- Rate limit adicional para `/api/admin/*` (60 req/min por IP, in-memory).
-- Verificação de `Origin`/`Host` para mutations admin (POST/PATCH/DELETE).
-- Respostas de erro padronizadas: `{ error: { code, message } }`.
-- Logs estruturados server-side para ações admin relevantes.
-- Paginação/filtros/ordenação nos endpoints admin principais e UI.
-- Melhorias de UX: empty states, mensagens de erro mais amigáveis.
-
-## Segurança
-
-### Headers aplicados
-Configuração em `next.config.ts` para todas as rotas:
-- `X-Content-Type-Options: nosniff`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `X-Frame-Options: DENY`
-- `Content-Security-Policy` mínimo viável
-
-> Nota CSP: política atual é conservadora e permite `unsafe-inline` para script/style por compatibilidade inicial. Em hardening adicional recomenda-se nonce/hash CSP.
-
-### CSRF / origem
-- Rotas `/api/admin/*` exigem sessão autenticada (STAFF/ADMIN) + permissões por role.
-- Mutations admin validam `Origin` vs `Host` para bloquear origens estranhas.
-- Cookies do Auth.js seguem defaults de segurança (same-site/secure conforme ambiente).
-
-### Rate limit
-- `/api/contact`: 5 pedidos / 10 minutos por IP.
-- `/api/admin/*`: 60 pedidos / minuto por IP.
-- Implementação atual é in-memory (adequada para ambiente simples); em produção distribuída usar Redis/Upstash.
-
-## Permissões
-- `STAFF`: GET/POST/PATCH nas APIs admin.
-- `ADMIN`: tudo do STAFF + DELETE.
-
-## Endpoints admin
-- `/api/admin/clients` (GET list paginado + pesquisa, POST)
-- `/api/admin/clients/[id]` (GET, PATCH, DELETE admin)
-- `/api/admin/services` (GET paginado + filtros, POST)
-- `/api/admin/services/[id]` (GET, PATCH, DELETE admin)
-- `/api/admin/clients/[id]/services` (GET, POST)
-- `/api/admin/client-services/[id]` (PATCH, DELETE admin)
-- `/api/admin/quote-requests` (GET paginado + filtro status)
-- `/api/admin/quote-requests/[id]` (GET, PATCH)
-
-## Setup local
-
-```bash
-cp .env.example .env
-npm install
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:seed
-npm run dev
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+RESEND_API_KEY=
+# opcionais para fallback SMTP
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+# opcional para redirect de logout em produção
+NEXT_PUBLIC_SITE_URL=https://teu-dominio.com
 ```
 
-## Deploy (Vercel + Postgres)
+## Setup Supabase
+1. Criar projeto no Supabase.
+2. Em **SQL Editor**, executar `supabase.sql`.
+3. Em **Authentication > Users**, criar 1 utilizador (admin).
+4. Em **Authentication > URL Configuration**, configurar URL local e produção.
 
-### 1) Base de dados
-- Criar Postgres gerido (Neon/Supabase/RDS).
-- Configurar `DATABASE_URL` no Vercel.
+## Correr local no Windows
+1. Instalar Node.js LTS.
+2. No PowerShell/CMD:
+   ```bash
+   npm install
+   npm run dev
+   ```
+3. Abrir `http://localhost:3000`.
+4. Login admin em `/login` com o user criado no Supabase.
 
-### 2) Variáveis de ambiente necessárias
-- `DATABASE_URL`
-- `NEXTAUTH_SECRET`
-- `NEXTAUTH_URL` (URL pública da app)
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `CONTACT_TO_EMAIL`
-- `RESEND_API_KEY` **ou** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
+## Deploy na Vercel
+1. Importar repositório na Vercel.
+2. Definir as variáveis de ambiente acima em **Project Settings > Environment Variables**.
+3. Deploy.
+4. Garantir que Supabase Auth URL config inclui domínio Vercel.
 
-### 3) Prisma em produção
-- Deploy migrations com:
-
-```bash
-npx prisma migrate deploy
-```
-
-- Seed apenas no primeiro setup (manual/CI controlado):
-
-```bash
-npm run prisma:seed
-```
-
-### 4) Verificações
-- Confirmar login em `/login`.
-- Confirmar acesso protegido em `/admin/*`.
-- Testar `/contacto` e entrega de email.
-
-## Nota técnica
-- Prisma só é usado no servidor (Route Handlers + Server Components).
-- `middleware` protege apenas `/admin/:path*` e **não** interfere com `/api/auth/*`.
+## Notas de segurança / RLS
+- `quote_requests`: insert para `anon`; leitura/edição apenas `authenticated`.
+- `clients` e `services`: acesso total apenas `authenticated`.
+- Como requisito pede apenas 1 admin, a recomendação é manter apenas 1 utilizador na tabela `auth.users`.

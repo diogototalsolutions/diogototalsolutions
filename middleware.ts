@@ -1,22 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 
-export async function middleware(req: NextRequest) {
-  const token = await getToken({
-    req,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
+export function middleware(request: NextRequest) {
+  const token = request.cookies.get("dts_access_token")?.value;
 
-  if (!token) {
-    const loginUrl = new URL("/login", req.url);
-    const nextPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
-    loginUrl.searchParams.set("next", nextPath);
-    return NextResponse.redirect(loginUrl);
+  if (!token && request.nextUrl.pathname.startsWith("/admin")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", request.nextUrl.pathname);
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 }
 
-export const config = {
-  matcher: ["/admin/:path*"],
-};
+export const config = { matcher: ["/admin/:path*"] };
